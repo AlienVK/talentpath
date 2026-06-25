@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const steps = [
   { id: 1, title: "Основная информация", desc: "Расскажите о ребёнке" },
@@ -54,13 +55,16 @@ const chronotypes = [
 ];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
+  const [grade, setGrade] = useState("");
   const [city, setCity] = useState("Алматы");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [chronotype, setChronotype] = useState("");
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
 
   const allInterests = [
     "Математика", "Программирование", "Роботы", "Шахматы",
@@ -76,6 +80,28 @@ export default function OnboardingPage() {
   };
 
   const progress = ((step - 1) / (steps.length - 1)) * 100;
+
+  async function handleFinish() {
+    setSaving(true);
+    try {
+      const intelligenceScores: Record<string, number> = {};
+      Object.entries(answers).forEach(([, type]) => {
+        intelligenceScores[type] = (intelligenceScores[type] || 50) + 15;
+      });
+      await fetch("/api/children", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, grade, city, chronotype,
+          interests: selectedInterests,
+          intelligenceScores,
+        }),
+      });
+      router.push("/talent");
+    } catch {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -265,11 +291,11 @@ export default function OnboardingPage() {
                   <p>✅ Тест интеллекта пройден</p>
                   <p>⏳ AI-анализ запускается...</p>
                 </div>
-                <Button className="w-full" asChild>
-                  <Link href="/talent">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Открыть карту талантов
-                  </Link>
+                <Button className="w-full" onClick={handleFinish} disabled={saving}>
+                  {saving
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Сохраняем...</>
+                    : <><Sparkles className="w-4 h-4 mr-2" />Открыть карту талантов</>
+                  }
                 </Button>
               </CardContent>
             </Card>

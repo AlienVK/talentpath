@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/client";
 import {
-  BarChart3,
   Brain,
   Calendar,
   LayoutDashboard,
@@ -30,6 +30,14 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside className="w-64 shrink-0 border-r bg-sidebar h-screen sticky top-0 flex flex-col">
@@ -98,13 +106,13 @@ export function Sidebar() {
           <Settings className="w-4 h-4" />
           Настройки
         </Link>
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:bg-sidebar-accent transition-colors"
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:bg-sidebar-accent transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Выйти
-        </Link>
+        </button>
       </div>
     </aside>
   );

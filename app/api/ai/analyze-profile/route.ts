@@ -1,11 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
-    const { profile } = await req.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { profile, childId } = await req.json();
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -13,7 +19,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `Ты — детский психолог и эксперт по развитию talentов. Проанализируй профиль ребёнка и дай краткий анализ на русском языке.
+          content: `Ты — детский психолог и эксперт по развитию талантов. Проанализируй профиль ребёнка и дай краткий анализ на русском языке.
 
 Профиль ребёнка:
 ${JSON.stringify(profile, null, 2)}
@@ -32,6 +38,17 @@ ${JSON.stringify(profile, null, 2)}
 
     const text = message.content[0].type === "text" ? message.content[0].text : "";
     const data = JSON.parse(text);
+
+    if (childId) {
+      await prisma.child.update({
+        where: { id: childId },
+        data: {
+          lastAiAnalysis: data,
+          lastAnalyzedAt: new Date(),
+        },
+      });
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error("AI analyze error:", error);
