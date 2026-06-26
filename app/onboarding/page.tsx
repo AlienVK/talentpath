@@ -63,8 +63,17 @@ export default function OnboardingPage() {
   const [city, setCity] = useState("Алматы");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [chronotype, setChronotype] = useState("");
+  const [currentActivities, setCurrentActivities] = useState("");
+  const [budget, setBudget] = useState("");
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState(false);
+
+  const budgetOptions: Record<string, number> = {
+    "до 30 000 ₸": 30000,
+    "30–60 000 ₸": 60000,
+    "60–100 000 ₸": 100000,
+    "100 000+ ₸": 150000,
+  };
 
   const allInterests = [
     "Математика", "Программирование", "Роботы", "Шахматы",
@@ -88,15 +97,37 @@ export default function OnboardingPage() {
       Object.entries(answers).forEach(([, type]) => {
         intelligenceScores[type] = (intelligenceScores[type] || 50) + 15;
       });
-      await fetch("/api/children", {
+
+      // Approximate birth date from age (Jan 1 of the birth year).
+      const ageNum = parseInt(age);
+      const birthDate = ageNum
+        ? `${new Date().getFullYear() - ageNum}-01-01`
+        : null;
+
+      const res = await fetch("/api/children", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, grade, city, chronotype,
+          name,
+          grade,
+          city,
+          chronotype,
+          birthDate,
           interests: selectedInterests,
+          currentActivities: currentActivities
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          budgetMonthly: budget ? budgetOptions[budget] : null,
           intelligenceScores,
         }),
       });
+
+      if (res.ok) {
+        // Make the new child the active one so the dashboard opens on it.
+        const child = await res.json();
+        if (child?.id) localStorage.setItem("tp_active_child", child.id);
+      }
       router.push("/talent");
     } catch {
       setSaving(false);
@@ -223,20 +254,39 @@ export default function OnboardingPage() {
                   <label className="text-sm font-medium mb-1.5 block">Класс</label>
                   <div className="flex gap-2 flex-wrap">
                     {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"].map(g => (
-                      <Button key={g} size="sm" variant="outline" className="w-10">{g}</Button>
+                      <Button
+                        key={g}
+                        size="sm"
+                        variant={grade === g ? "default" : "outline"}
+                        className="w-10"
+                        onClick={() => setGrade(g)}
+                      >
+                        {g}
+                      </Button>
                     ))}
                   </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Текущие секции/кружки</label>
-                  <Input placeholder="Например: Шахматы, Плавание, Рисование" />
+                  <Input
+                    placeholder="Например: Шахматы, Плавание, Рисование"
+                    value={currentActivities}
+                    onChange={e => setCurrentActivities(e.target.value)}
+                  />
                   <p className="text-xs text-muted-foreground mt-1">Через запятую</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Ежемесячный бюджет на занятия</label>
                   <div className="flex gap-2 flex-wrap">
                     {["до 30 000 ₸", "30–60 000 ₸", "60–100 000 ₸", "100 000+ ₸"].map(b => (
-                      <Button key={b} size="sm" variant="outline">{b}</Button>
+                      <Button
+                        key={b}
+                        size="sm"
+                        variant={budget === b ? "default" : "outline"}
+                        onClick={() => setBudget(b)}
+                      >
+                        {b}
+                      </Button>
                     ))}
                   </div>
                 </div>

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/client";
+import { useChildren, ageFromBirthDate } from "@/components/dashboard/children-provider";
 import {
   Brain,
   Calendar,
@@ -28,9 +29,22 @@ const navItems = [
   { href: "/budget", icon: Wallet, label: "Бюджет" },
 ];
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+function childMeta(grade: number | null, city: string | null): string {
+  const bits = [];
+  if (grade) bits.push(`${grade} класс`);
+  if (city) bits.push(city);
+  return bits.join(" · ") || "Профиль не заполнен";
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { children: kids, activeChild, activeChildId, setActiveChildId, loading } = useChildren();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -52,15 +66,53 @@ export function Sidebar() {
       {/* Child selector */}
       <div className="px-3 pt-4 pb-2">
         <p className="text-xs text-muted-foreground mb-2 px-1">Ребёнок</p>
-        <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-primary/5 border border-primary/10 cursor-pointer hover:bg-primary/10 transition-colors">
-          <Avatar className="w-8 h-8">
-            <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">АС</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Алибек, 10 лет</p>
-            <p className="text-xs text-muted-foreground">4 класс · Алматы</p>
+        {loading ? (
+          <div className="h-12 rounded-lg bg-muted/50 animate-pulse" />
+        ) : !activeChild ? (
+          <Link
+            href="/onboarding"
+            className="flex items-center gap-2 px-2 py-2 rounded-lg bg-primary/5 border border-primary/10 border-dashed hover:bg-primary/10 transition-colors"
+          >
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">+</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">Добавить ребёнка</p>
+              <p className="text-xs text-muted-foreground">Заполните профиль</p>
+            </div>
+          </Link>
+        ) : (
+          <div className="relative flex items-center gap-2 px-2 py-2 rounded-lg bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors">
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="bg-primary/20 text-primary text-xs font-bold">
+                {initials(activeChild.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {activeChild.name}
+                {ageFromBirthDate(activeChild.birth_date) !== null
+                  ? `, ${ageFromBirthDate(activeChild.birth_date)} лет`
+                  : ""}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {childMeta(activeChild.grade, activeChild.city)}
+              </p>
+            </div>
+            {kids.length > 1 && (
+              <select
+                aria-label="Выбрать ребёнка"
+                value={activeChildId ?? ""}
+                onChange={(e) => setActiveChildId(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              >
+                {kids.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Nav */}

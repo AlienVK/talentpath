@@ -1,18 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import {
-  Brain,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import { Brain, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import {
   RadarChart,
   PolarGrid,
@@ -21,57 +15,17 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { useChildren, ageFromBirthDate } from "@/components/dashboard/children-provider";
 
-const talentData = [
-  { subject: "Логика", value: 88, fullMark: 100 },
-  { subject: "Творчество", value: 72, fullMark: 100 },
-  { subject: "Физика", value: 65, fullMark: 100 },
-  { subject: "Общение", value: 58, fullMark: 100 },
-  { subject: "Музыка", value: 45, fullMark: 100 },
-  { subject: "Природа", value: 70, fullMark: 100 },
-  { subject: "Рефлексия", value: 80, fullMark: 100 },
-  { subject: "Пространство", value: 76, fullMark: 100 },
-];
-
-const intelligences = [
-  { name: "Логико-математический", score: 88, color: "bg-purple-500", icon: "🧮", desc: "Сильная аналитика, любит задачи с правилами" },
-  { name: "Внутриличностный", score: 80, color: "bg-indigo-500", icon: "🪞", desc: "Хорошо понимает свои эмоции и мотивацию" },
-  { name: "Творческий", score: 72, color: "bg-pink-500", icon: "🎨", desc: "Выражает идеи через образы и конструкции" },
-  { name: "Натуралистический", score: 70, color: "bg-green-500", icon: "🌿", desc: "Замечает паттерны в природе, интерес к науке" },
-  { name: "Пространственный", score: 76, color: "bg-blue-500", icon: "🗺️", desc: "Думает образами, хорошо с роботами и 3D" },
-  { name: "Телесно-кинестетический", score: 65, color: "bg-cyan-500", icon: "🏃", desc: "Учится через движение и практику" },
-  { name: "Межличностный", score: 58, color: "bg-amber-500", icon: "👥", desc: "Предпочитает индивидуальную работу" },
-  { name: "Музыкальный", score: 45, color: "bg-red-400", icon: "🎵", desc: "Минимальный интерес к ритму и звукам" },
-];
-
-const topDirections = [
-  {
-    title: "Программирование и робототехника",
-    match: 94,
-    reason: "Логический интеллект (88%) + пространственное мышление (76%) + интерес к конструированию. Алибек уже посещает робототехнику — углубление даст быстрый результат.",
-    sections: ["Олимпиадное программирование", "Arduino-мастерская", "Scratch/Python клубы"],
-    emoji: "🤖",
-  },
-  {
-    title: "Математика и физика",
-    match: 87,
-    reason: "Высокий логический интеллект и рефлексия указывают на способность к абстрактному мышлению. Рекомендуется олимпиадный трек.",
-    sections: ["Кенгуру / Олимпиады", "Физический кружок", "Репетитор по ЕНТ-математике"],
-    emoji: "🔬",
-  },
-  {
-    title: "Шахматы (углубление)",
-    match: 82,
-    reason: "Уже занимается, есть 3-й разряд. Логика и рефлексия — идеальное сочетание для турнирного шахматиста.",
-    sections: ["Турнирная подготовка", "Онлайн-разборы с тренером"],
-    emoji: "♟️",
-  },
-];
-
-const warnings = [
-  { type: "warning", text: "Социальный интеллект ниже нормы — рекомендуем групповые форматы хотя бы раз в неделю" },
-  { type: "info", text: "Хронотип — «жаворонок». Умственные задачи лучше планировать до 13:00" },
-  { type: "warning", text: "Среда перегружена (85%) — физическое занятие лучше перенести" },
+const GARDNER = [
+  { key: "logical", label: "Логико-математический", short: "Логика", icon: "🧮" },
+  { key: "spatial", label: "Пространственный", short: "Простр.", icon: "🗺️" },
+  { key: "linguistic", label: "Лингвистический", short: "Речь", icon: "📖" },
+  { key: "musical", label: "Музыкальный", short: "Музыка", icon: "🎵" },
+  { key: "bodily", label: "Телесно-кинестетический", short: "Тело", icon: "🏃" },
+  { key: "interpersonal", label: "Межличностный", short: "Общение", icon: "👥" },
+  { key: "intrapersonal", label: "Внутриличностный", short: "Рефлексия", icon: "🪞" },
+  { key: "naturalistic", label: "Натуралистический", short: "Природа", icon: "🌿" },
 ];
 
 interface AiAnalysis {
@@ -81,54 +35,78 @@ interface AiAnalysis {
 }
 
 export default function TalentPage() {
+  const { activeChild, loading: childLoading, refresh } = useChildren();
   const [loading, setLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Show the saved analysis when the active child changes.
+  useEffect(() => {
+    setAiAnalysis(activeChild?.last_ai_analysis ?? null);
+    setError(null);
+  }, [activeChild]);
+
+  const scores = activeChild?.intelligence_scores ?? {};
+  const hasScores = Object.keys(scores).length > 0;
+  const radarData = GARDNER.map((g) => ({ subject: g.short, value: scores[g.key] ?? 40 }));
+  const bars = GARDNER.map((g) => ({ ...g, score: scores[g.key] ?? 40 })).sort((a, b) => b.score - a.score);
+
   async function runAiAnalysis() {
+    if (!activeChild) return;
     setLoading(true);
     setError(null);
     try {
       const profile = {
-        name: "Алибек",
-        age: 10,
-        grade: 4,
-        city: "Алматы",
-        chronotype: "жаворонок",
-        learningStyle: "визуал",
-        socialType: "интроверт",
-        interests: ["роботы", "шахматы", "математика", "рисование", "плавание"],
-        dislikedActivities: ["пение", "публичные выступления"],
-        currentActivities: ["шахматы", "плавание", "робототехника", "рисование"],
-        intelligences: {
-          logical: 88,
-          intrapersonal: 80,
-          spatial: 76,
-          naturalistic: 70,
-          creative: 72,
-          bodily: 65,
-          interpersonal: 58,
-          musical: 45,
-        },
-        academicStrengths: ["математика", "физика", "информатика"],
-        budget: 50000,
+        name: activeChild.name,
+        age: ageFromBirthDate(activeChild.birth_date),
+        grade: activeChild.grade,
+        city: activeChild.city,
+        chronotype: activeChild.chronotype,
+        learningStyle: activeChild.learning_style,
+        socialType: activeChild.social_type,
+        interests: activeChild.interests,
+        currentActivities: activeChild.current_activities,
+        intelligences: scores,
       };
 
       const res = await fetch("/api/ai/analyze-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile }),
+        body: JSON.stringify({ profile, childId: activeChild.id }),
       });
 
       if (!res.ok) throw new Error("Ошибка API");
       const data = await res.json();
       setAiAnalysis(data);
-    } catch (e) {
-      setError("Не удалось получить анализ. Проверьте ANTHROPIC_API_KEY в .env.local");
+      refresh(); // pull the saved analysis into the shared child state
+    } catch {
+      setError("Не удалось получить анализ. Попробуйте ещё раз.");
     } finally {
       setLoading(false);
     }
   }
+
+  if (childLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64 text-muted-foreground">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…
+      </div>
+    );
+  }
+
+  if (!activeChild) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-xl text-center gap-3">
+          <Sparkles className="w-10 h-10 text-muted-foreground" />
+          <p className="text-muted-foreground">Заполните профиль ребёнка, чтобы построить карту талантов.</p>
+          <Button asChild><a href="/onboarding">Заполнить профиль</a></Button>
+        </div>
+      </div>
+    );
+  }
+
+  const age = ageFromBirthDate(activeChild.birth_date);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -139,26 +117,25 @@ export default function TalentPage() {
             <Sparkles className="w-6 h-6 text-primary" />
             Карта талантов
           </h1>
-          <p className="text-muted-foreground mt-1">Алибек · 10 лет · обновлено сегодня</p>
+          <p className="text-muted-foreground mt-1">
+            {activeChild.name}{age !== null ? ` · ${age} лет` : ""}
+          </p>
         </div>
         <Button onClick={runAiAnalysis} disabled={loading}>
           {loading ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Анализирую...</>
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Анализирую…</>
           ) : (
             <><RefreshCw className="w-4 h-4 mr-2" />Запустить Claude</>
           )}
         </Button>
       </div>
 
-      {/* Error */}
       {error && (
-        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
-          {error}
-        </div>
+        <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
       )}
 
-      {/* AI Analysis result */}
-      {aiAnalysis && (
+      {/* AI analysis */}
+      {aiAnalysis ? (
         <Card className="border-primary/30 bg-primary/2">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -186,33 +163,42 @@ export default function TalentPage() {
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <Card className="border-dashed">
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Нажмите «Запустить Claude», чтобы получить персональный анализ талантов {activeChild.name}.
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Radar chart */}
+        {/* Radar */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Радар интеллектов</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <RadarChart data={talentData}>
-                <PolarGrid strokeDasharray="3 3" />
-                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11 }} />
-                <Radar
-                  name="Алибек"
-                  dataKey="value"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
-                  fillOpacity={0.2}
-                  strokeWidth={2}
-                />
-                <Tooltip
-                  formatter={(value) => [`${value}/100`, "Балл"]}
-                  contentStyle={{ fontSize: 12 }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+            {hasScores ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <RadarChart data={radarData}>
+                  <PolarGrid strokeDasharray="3 3" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11 }} />
+                  <Radar
+                    name={activeChild.name}
+                    dataKey="value"
+                    stroke="hsl(var(--primary))"
+                    fill="hsl(var(--primary))"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                  />
+                  <Tooltip formatter={(value) => [`${value}/100`, "Балл"]} contentStyle={{ fontSize: 12 }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-center text-sm text-muted-foreground">
+                Пройдите мини-тест Гарднера в онбординге, чтобы увидеть радар интеллектов.
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -222,78 +208,56 @@ export default function TalentPage() {
             <CardTitle className="text-base">Типы интеллекта (Гарднер)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {intelligences
-              .sort((a, b) => b.score - a.score)
-              .map((item) => (
-                <div key={item.name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <span>{item.icon}</span>
-                      <span className="font-medium">{item.name.split(" ")[0]}</span>
-                    </div>
-                    <span className="text-sm font-bold">{item.score}</span>
+            {bars.map((item) => (
+              <div key={item.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span>{item.icon}</span>
+                    <span className="font-medium">{item.short}</span>
                   </div>
-                  <Progress value={item.score} className="h-1.5" />
+                  <span className="text-sm font-bold">{item.score}</span>
                 </div>
-              ))}
+                <Progress value={item.score} className="h-1.5" />
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Top directions */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Топ-3 направления для развития</h2>
-        <div className="space-y-4">
-          {topDirections.map((dir, i) => (
-            <Card key={dir.title} className="border hover:border-primary/30 transition-colors">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl shrink-0">
-                    {dir.emoji}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground">#{i + 1}</span>
-                      <h3 className="font-semibold text-sm">{dir.title}</h3>
-                      <Badge className="ml-auto bg-green-50 text-green-700 border-green-200 text-xs">
-                        {dir.match}% совпадение
-                      </Badge>
-                    </div>
-                    <div className="flex items-start gap-1.5 mb-2">
-                      <Zap className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-                      <p className="text-xs text-muted-foreground leading-relaxed">{dir.reason}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {dir.sections.map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Warnings */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Предупреждения AI</h2>
-        <div className="space-y-2">
-          {warnings.map((w, i) => (
-            <div
-              key={i}
-              className={`flex items-start gap-2 p-3 rounded-lg text-sm border ${
-                w.type === "warning"
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-blue-200 bg-blue-50 text-blue-800"
-              }`}
-            >
-              <span className="shrink-0">{w.type === "warning" ? "⚠️" : "ℹ️"}</span>
-              {w.text}
-            </div>
-          ))}
-        </div>
+      {/* Interests & current activities from DB */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Интересы</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeChild.interests.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {activeChild.interests.map((i) => (
+                  <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Не указаны</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Текущие занятия</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeChild.current_activities.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {activeChild.current_activities.map((a) => (
+                  <Badge key={a} variant="outline" className="text-xs">{a}</Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Не указаны</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

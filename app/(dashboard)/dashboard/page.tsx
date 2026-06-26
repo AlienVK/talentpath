@@ -1,61 +1,41 @@
+"use client";
+
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
-  AlertTriangle,
   ArrowRight,
-  Brain,
   Calendar,
   CheckCircle2,
-  MessageCircle,
+  Loader2,
   Sparkles,
   Star,
   Trophy,
   TrendingUp,
-  Zap,
 } from "lucide-react";
+import { useChildren } from "@/components/dashboard/children-provider";
 
 const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-const today = 2; // Wednesday
+const typeColors: Record<string, string> = {
+  mental: "bg-purple-100 text-purple-700 border-purple-200",
+  physical: "bg-cyan-100 text-cyan-700 border-cyan-200",
+  creative: "bg-pink-100 text-pink-700 border-pink-200",
+  school: "bg-gray-100 text-gray-700 border-gray-200",
+  other: "bg-blue-100 text-blue-700 border-blue-200",
+};
+const levelEmoji: Record<string, string> = { gold: "🥇", silver: "🥈", bronze: "🥉" };
 
-const schedule = [
-  { day: 0, time: "16:00", name: "Шахматы", load: "mental", color: "bg-purple-100 text-purple-700 border-purple-200" },
-  { day: 0, time: "18:00", name: "Математика", load: "mental", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  { day: 1, time: "17:00", name: "Плавание", load: "physical", color: "bg-cyan-100 text-cyan-700 border-cyan-200" },
-  { day: 2, time: "15:30", name: "Робототехника", load: "mental", color: "bg-orange-100 text-orange-700 border-orange-200" },
-  { day: 3, time: "16:00", name: "Рисование", load: "creative", color: "bg-pink-100 text-pink-700 border-pink-200" },
-  { day: 3, time: "18:30", name: "Английский", load: "mental", color: "bg-green-100 text-green-700 border-green-200" },
-  { day: 4, time: "17:00", name: "Плавание", load: "physical", color: "bg-cyan-100 text-cyan-700 border-cyan-200" },
-];
+interface Activity { id: string; name: string; type: string; days: string[]; time_start: string | null; time_end: string | null; }
+interface Achievement { id: string; title: string; description: string | null; points: number; badge_level: string; }
 
-const dayLoads = [72, 45, 85, 68, 45, 0, 0];
-
-const achievements = [
-  { icon: "🔥", title: "Стрик 14 дней", desc: "Не пропускал занятия 2 недели", new: true },
-  { icon: "♟️", title: "Шахматный разряд", desc: "Выполнил 3-й юношеский разряд", new: true },
-  { icon: "🏊", title: "100 метров", desc: "Проплыл первые 100м без остановки", new: false },
-];
-
-const recommendations = [
-  {
-    name: "Секция программирования",
-    org: "IT-школа CodeKids",
-    reason: "Высокий логический интеллект + интерес к роботам",
-    price: "15 000 ₸/мес",
-    distance: "1.2 км",
-    match: 94,
-  },
-  {
-    name: "Репетитор по физике",
-    org: "Арман Сейткали",
-    reason: "Олимпиадная подготовка — следующий шаг после математики",
-    price: "5 000 ₸/час",
-    distance: "онлайн",
-    match: 88,
-  },
-];
+function mins(t: string | null) { if (!t) return 0; const [h, m] = t.split(":").map(Number); return (h || 0) * 60 + (m || 0); }
+function dayLoad(acts: Activity[]) {
+  const total = acts.reduce((s, a) => { const d = mins(a.time_end) - mins(a.time_start); return s + (d > 0 ? d : 60); }, 0);
+  return Math.min(100, Math.round((total / 180) * 100));
+}
 
 function LoadBadge({ load }: { load: number }) {
   if (load === 0) return <span className="text-xs text-muted-foreground">—</span>;
@@ -64,40 +44,88 @@ function LoadBadge({ load }: { load: number }) {
 }
 
 export default function DashboardPage() {
+  const { activeChild, loading: childLoading } = useChildren();
+  const [parentName, setParentName] = useState<string>("");
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const todayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+
+  useEffect(() => {
+    fetch("/api/profile").then(r => r.ok ? r.json() : null).then(p => { if (p?.name) setParentName(p.name); }).catch(() => {});
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!activeChild) { setActivities([]); setAchievements([]); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([
+        fetch(`/api/activities?childId=${activeChild.id}`).then(r => r.json()),
+        fetch(`/api/achievements?childId=${activeChild.id}`).then(r => r.json()),
+      ]);
+      setActivities(Array.isArray(a) ? a : []);
+      setAchievements(Array.isArray(b) ? b : []);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeChild]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function onDay(d: number) {
+    return activities.filter(a => a.days.map(Number).includes(d)).sort((x, y) => mins(x.time_start) - mins(y.time_start));
+  }
+  const dayLoads = weekDays.map((_, i) => dayLoad(onDay(i)));
+  const weeklyCount = activities.reduce((s, a) => s + a.days.length, 0);
+  const activeLoads = dayLoads.filter(l => l > 0);
+  const avgLoad = activeLoads.length ? Math.round(activeLoads.reduce((s, l) => s + l, 0) / activeLoads.length) : 0;
+  const totalXp = achievements.reduce((s, a) => s + (a.points || 0), 0);
+  const level = Math.floor(totalXp / 500) + 1;
+  const xpInLevel = totalXp % 500;
+
+  if (childLoading) {
+    return <div className="p-6 flex items-center justify-center h-64 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Загрузка…</div>;
+  }
+
+  const greeting = parentName ? `Привет, ${parentName} 👋` : "Привет 👋";
+
+  if (!activeChild) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold">{greeting}</h1>
+        <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-xl text-center gap-3">
+          <Sparkles className="w-10 h-10 text-muted-foreground" />
+          <p className="text-muted-foreground">Добавьте профиль ребёнка, чтобы начать.</p>
+          <Button asChild><Link href="/onboarding">Заполнить профиль</Link></Button>
+        </div>
+      </div>
+    );
+  }
+
+  const todayActs = onDay(todayIdx);
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Привет, Айгерим 👋</h1>
-          <p className="text-muted-foreground mt-1">25 июня · среда · неделя в самом разгаре</p>
+          <h1 className="text-2xl font-bold">{greeting}</h1>
+          <p className="text-muted-foreground mt-1">
+            {new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", weekday: "long" })} · профиль {activeChild.name}
+          </p>
         </div>
         <Button asChild>
-          <Link href="/talent">
-            <Sparkles className="w-4 h-4 mr-2" />
-            AI-анализ
-          </Link>
+          <Link href="/talent"><Sparkles className="w-4 h-4 mr-2" />AI-анализ</Link>
         </Button>
       </div>
 
-      {/* Alert */}
-      <div className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
-        <span>
-          <strong>Среда перегружена (85%).</strong> Рекомендуем перенести Робототехнику на пятницу — там нагрузка 45%.
-        </span>
-        <Button size="sm" variant="outline" className="ml-auto border-amber-300 text-amber-700 hover:bg-amber-100 shrink-0">
-          Перенести
-        </Button>
-      </div>
-
-      {/* Stats row */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: Calendar, label: "Занятий на неделе", value: "7", sub: "+2 от прошлой" },
-          { icon: TrendingUp, label: "Нагрузка", value: "63%", sub: "норма" },
-          { icon: Trophy, label: "Очков за месяц", value: "2 840", sub: "уровень 12" },
-          { icon: Star, label: "Посещаемость", value: "95%", sub: "за 30 дней" },
+          { icon: Calendar, label: "Занятий на неделе", value: String(weeklyCount), sub: `${activities.length} секций` },
+          { icon: TrendingUp, label: "Средняя нагрузка", value: avgLoad ? `${avgLoad}%` : "—", sub: avgLoad <= 60 ? "норма" : avgLoad <= 80 ? "умеренно" : "высокая" },
+          { icon: Trophy, label: "Очков всего", value: totalXp.toLocaleString("ru-RU"), sub: `уровень ${level}` },
+          { icon: Star, label: "Достижений", value: String(achievements.length), sub: "получено" },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="pt-4">
@@ -127,118 +155,91 @@ export default function DashboardPage() {
             <div className="grid grid-cols-7 gap-1 mb-3">
               {weekDays.map((d, i) => (
                 <div key={d} className="text-center">
-                  <div className={`text-xs mb-1 font-medium ${i === today ? "text-primary" : "text-muted-foreground"}`}>{d}</div>
+                  <div className={`text-xs mb-1 font-medium ${i === todayIdx ? "text-primary" : "text-muted-foreground"}`}>{d}</div>
                   <LoadBadge load={dayLoads[i]} />
                 </div>
               ))}
             </div>
-            <div className="space-y-1.5 mt-3">
-              {schedule.filter(s => s.day === today).map((s, i) => (
-                <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm ${s.color}`}>
-                  <span className="text-xs font-mono">{s.time}</span>
-                  <span className="font-medium">{s.name}</span>
-                </div>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            ) : todayActs.length > 0 ? (
+              <div className="space-y-1.5 mt-3">
+                {todayActs.map((s) => (
+                  <div key={s.id} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm ${typeColors[s.type] ?? typeColors.other}`}>
+                    <span className="text-xs font-mono">{s.time_start ?? "—"}</span>
+                    <span className="font-medium">{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-3">Сегодня занятий нет</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Achievements */}
+        {/* Achievements mini */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Новые достижения</CardTitle>
+              <CardTitle className="text-base">Достижения</CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/achievements">Все <ArrowRight className="w-3 h-3 ml-1" /></Link>
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {achievements.map((a) => (
-              <div key={a.title} className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-xl shrink-0">
-                  {a.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">{a.title}</p>
-                    {a.new && <Badge className="text-[10px] h-4 px-1 bg-primary/10 text-primary">Новое</Badge>}
+            {loading ? (
+              <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            ) : achievements.length > 0 ? (
+              <>
+                {achievements.slice(0, 3).map((a) => (
+                  <div key={a.id} className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-xl shrink-0">
+                      {levelEmoji[a.badge_level] ?? "🏅"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{a.title}</p>
+                      {a.description && <p className="text-xs text-muted-foreground truncate">{a.description}</p>}
+                    </div>
+                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{a.desc}</p>
+                ))}
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Уровень {level}</span>
+                    <span className="text-muted-foreground">{xpInLevel} / 500 XP</span>
+                  </div>
+                  <Progress value={(xpInLevel / 500) * 100} className="h-2" />
                 </div>
-                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-              </div>
-            ))}
-
-            {/* XP Progress */}
-            <div className="pt-2 border-t">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-muted-foreground">Уровень 12</span>
-                <span className="text-muted-foreground">840 / 1000 XP</span>
-              </div>
-              <Progress value={84} className="h-2" />
-            </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-3">
+                Пока нет достижений. <Link href="/achievements" className="text-primary hover:underline">Отметить первое</Link>
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* AI Recommendations */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base">AI-рекомендации</CardTitle>
-              <Badge className="bg-primary/10 text-primary text-xs">Claude</Badge>
-            </div>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/marketplace">Маркетплейс <ArrowRight className="w-3 h-3 ml-1" /></Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-4">
-            {recommendations.map((r) => (
-              <div key={r.name} className="border rounded-lg p-4 hover:border-primary/30 transition-colors">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-medium text-sm">{r.name}</p>
-                    <p className="text-xs text-muted-foreground">{r.org}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-primary">{r.match}%</div>
-                    <div className="text-[10px] text-muted-foreground">совпадение</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-1.5 mb-3">
-                  <Zap className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-muted-foreground">{r.reason}</p>
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{r.price}</span>
-                  <span>{r.distance}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* AI Coach */}
+      {/* AI summary / CTA */}
       <Card className="border-primary/20 bg-primary/2">
         <CardContent className="pt-4">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">
-              <MessageCircle className="w-4 h-4 text-primary-foreground" />
+              <Sparkles className="w-4 h-4 text-primary-foreground" />
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-medium">AI-коуч</p>
+                <p className="text-sm font-medium">Карта талантов</p>
                 <Badge className="bg-primary/10 text-primary text-[10px] h-4">Claude</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Алибек, как прошла тренировка по плаванию вчера? Тренер говорил, что ты хорошо поработал над техникой поворота. Что было сложнее всего?
+                {activeChild.last_ai_analysis?.summary
+                  ?? `Запустите AI-анализ, чтобы Claude построил персональную карту талантов для ${activeChild.name}.`}
               </p>
-              <Button size="sm" variant="outline" className="mt-2">Ответить коучу</Button>
+              <Button size="sm" variant="outline" className="mt-2" asChild>
+                <Link href="/talent">Открыть карту талантов</Link>
+              </Button>
             </div>
           </div>
         </CardContent>
