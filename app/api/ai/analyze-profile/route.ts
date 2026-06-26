@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -40,13 +40,10 @@ ${JSON.stringify(profile, null, 2)}
     const data = JSON.parse(text);
 
     if (childId) {
-      await prisma.child.update({
-        where: { id: childId },
-        data: {
-          lastAiAnalysis: data,
-          lastAnalyzedAt: new Date(),
-        },
-      });
+      await supabaseAdmin
+        .from("children")
+        .update({ last_ai_analysis: data, last_analyzed_at: new Date().toISOString() })
+        .eq("id", childId);
     }
 
     return NextResponse.json(data);
