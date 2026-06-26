@@ -1,41 +1,12 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-
-// Cookie-based storage so the server-side middleware can read the session
-const cookieStorage = {
-  getItem(key: string): string | null {
-    if (typeof document === "undefined") return null;
-    for (const c of document.cookie.split("; ")) {
-      const idx = c.indexOf("=");
-      if (idx !== -1 && c.slice(0, idx) === key) {
-        return decodeURIComponent(c.slice(idx + 1));
-      }
-    }
-    return null;
-  },
-  setItem(key: string, value: string): void {
-    if (typeof document === "undefined") return;
-    document.cookie = `${key}=${encodeURIComponent(value)};path=/;max-age=${365 * 24 * 3600};SameSite=Lax`;
-  },
-  removeItem(key: string): void {
-    if (typeof document === "undefined") return;
-    document.cookie = `${key}=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax`;
-  },
-};
+import { createBrowserClient } from "@supabase/ssr";
 
 export function createClient() {
   // .trim() strips any stray BOM/whitespace from the env value — a leading
   // U+FEFF would otherwise break fetch() with "non ISO-8859-1 code point".
-  return createSupabaseClient(
+  // createBrowserClient writes the session cookie in the exact format the
+  // server-side createServerClient (middleware/route handlers) reads.
+  return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim(),
-    {
-      auth: {
-        storage: cookieStorage,
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: "pkce",
-      },
-    }
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim()
   );
 }
