@@ -20,39 +20,58 @@ export default function RegisterPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
 
+    if (!email.trim()) {
+      setError("Введите email");
+      return;
+    }
     if (password.length < 6) {
       setError("Пароль должен быть не менее 6 символов");
-      setLoading(false);
       return;
     }
 
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    setLoading(true);
 
-    if (error) {
-      setError(error.message === "User already registered" ? "Этот email уже зарегистрирован" : error.message);
+    try {
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: { name: name.trim() || email.split("@")[0] },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (authError) {
+        const msg = authError.message;
+        if (msg.includes("already registered") || msg.includes("already been registered")) {
+          setError("Этот email уже зарегистрирован. Попробуйте войти.");
+        } else if (msg.includes("rate limit")) {
+          setError("Слишком много попыток. Подождите немного и попробуйте снова.");
+        } else {
+          setError(msg);
+        }
+        return;
+      }
+
+      if (data.user && !data.session) {
+        // Email confirmation required
+        setDone(true);
+      } else if (data.session) {
+        // Auto-confirmed (email confirmation disabled)
+        router.push("/onboarding");
+        router.refresh();
+      } else {
+        setDone(true);
+      }
+    } catch (err) {
+      setError("Что-то пошло не так. Проверьте интернет и попробуйте снова.");
+      console.error(err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (data.user && !data.session) {
-      setDone(true);
-    } else {
-      router.push("/onboarding");
-      router.refresh();
-    }
-
-    setLoading(false);
   }
 
   if (done) {
@@ -64,7 +83,8 @@ export default function RegisterPage() {
           </div>
           <h1 className="text-xl font-bold">Проверьте почту</h1>
           <p className="text-muted-foreground text-sm">
-            Мы отправили письмо на <strong>{email}</strong>. Перейдите по ссылке в письме для подтверждения.
+            Мы отправили письмо на <strong>{email}</strong>.<br />
+            Перейдите по ссылке в письме для подтверждения.
           </p>
           <Button asChild><Link href="/login">Войти</Link></Button>
         </div>
@@ -95,12 +115,13 @@ export default function RegisterPage() {
                 </div>
               )}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Ваше имя</label>
+                <label className="text-sm font-medium">Ваше имя <span className="text-muted-foreground">(необязательно)</span></label>
                 <Input
                   placeholder="Айгерим"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  required
+                  autoComplete="name"
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-1.5">
@@ -110,8 +131,8 @@ export default function RegisterPage() {
                   placeholder="example@mail.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  required
                   autoComplete="email"
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-1.5">
@@ -121,12 +142,16 @@ export default function RegisterPage() {
                   placeholder="Минимум 6 символов"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  required
                   autoComplete="new-password"
+                  disabled={loading}
                 />
               </div>
-              <Button className="w-full" disabled={loading}>
-                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Создаём...</> : "Зарегистрироваться"}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Создаём аккаунт...</>
+                ) : (
+                  "Зарегистрироваться"
+                )}
               </Button>
             </form>
           </CardContent>

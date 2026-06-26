@@ -21,17 +21,26 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      setError("Неверный email или пароль");
+      if (error) {
+        if (error.message.includes("Email not confirmed")) {
+          setError("Подтвердите email — проверьте почту и нажмите на ссылку в письме.");
+        } else {
+          setError("Неверный email или пароль");
+        }
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Что-то пошло не так. Попробуйте снова.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
@@ -78,7 +87,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                 />
               </div>
-              <Button className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Входим...</> : "Войти"}
               </Button>
             </form>
