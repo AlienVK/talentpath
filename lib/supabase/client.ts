@@ -23,9 +23,11 @@ const cookieStorage = {
 };
 
 export function createClient() {
+  // .trim() strips any stray BOM/whitespace from the env value — a leading
+  // U+FEFF would otherwise break fetch() with "non ISO-8859-1 code point".
   return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim(),
     {
       auth: {
         storage: cookieStorage,
